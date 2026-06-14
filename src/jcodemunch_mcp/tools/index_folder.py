@@ -1952,7 +1952,11 @@ def index_folder(
                 file_dest.parent.mkdir(parents=True, exist_ok=True)
                 store._write_cached_text(file_dest, content)
 
-            language = get_language_for_path(rel_path)
+            language = get_language_for_path(
+                rel_path,
+                content=content,
+                repo_root=str(folder_path),
+            )
             if not language:
                 no_symbols_files.append(rel_path)
                 # content eligible for GC after this iteration
