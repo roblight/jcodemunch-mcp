@@ -97,7 +97,7 @@ def parse_immediate(
         content = file_contents.get(rel_path)
         if content is None:
             continue
-        language = get_language_for_path(rel_path)
+        language = get_language_for_path(rel_path, content=content, repo_root=repo)
         if not language:
             no_symbols_files.append(rel_path)
             continue
@@ -218,7 +218,7 @@ def parse_and_prepare_incremental(
         content = file_contents.get(rel_path)
         if content is None:
             continue
-        language = get_language_for_path(rel_path)
+        language = get_language_for_path(rel_path, content=content, repo_root=repo)
         if not language:
             no_symbols_files.append(rel_path)
             continue
@@ -343,7 +343,7 @@ def parse_and_prepare_full(
 
     for path in source_file_list:
         content = file_contents[path]
-        language = get_language_for_path(path)
+        language = get_language_for_path(path, content=content, repo_root=repo)
         if not language:
             no_symbols_files.append(path)
             continue

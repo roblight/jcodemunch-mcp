@@ -4,6 +4,7 @@ import logging
 import os
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 
@@ -2066,6 +2067,53 @@ def _apply_extra_extensions() -> None:
         _APPLIED_EXTENSIONS = True
 
 
+def _allowed_extensionless_script_roots(repo: str | None = None) -> list[Path]:
+    from .. import config as _cfg
+    roots = _cfg.get("extensionless_script_folders", [], repo=repo) or []
+    return [Path(root).expanduser().resolve() for root in roots]
+
+
+def is_allowed_extensionless_script_path(path: str, repo_root: str | None = None) -> bool:
+    p = Path(path).expanduser()
+    if p.suffix:
+        return False
+    roots = _allowed_extensionless_script_roots(repo_root)
+    try:
+        candidate = p.resolve() if p.is_absolute() else (
+            (Path(repo_root).expanduser().resolve() / p).resolve() if repo_root else None
+        )
+    except OSError:
+        candidate = None
+    if candidate is None:
+        return False
+    candidate_str = candidate.as_posix().rstrip("/")
+    for root in roots:
+        root_str = root.as_posix().rstrip("/")
+        if candidate_str == root_str or candidate_str.startswith(root_str + "/"):
+            return True
+    return False
+
+
+def get_extensionless_script_language(path: str, content: str | None = None, repo_root: str | None = None) -> "Optional[str]":
+    if content is None or not is_allowed_extensionless_script_path(path, repo_root=repo_root):
+        return None
+    first_line = content.splitlines()[0].strip() if content else ""
+    if not first_line.startswith("#!"):
+        return None
+    shebang = first_line[2:].strip().lower()
+    if "python" in shebang:
+        return "python"
+    if "perl" in shebang:
+        return "perl"
+    if "ruby" in shebang:
+        return "ruby"
+    if "node" in shebang or "deno" in shebang:
+        return "javascript"
+    if any(token in shebang for token in ("bash", "sh", "zsh", "ksh")):
+        return "bash"
+    return None
+
+
 def get_language_extensions() -> dict[str, str]:
     """Return LANGUAGE_EXTENSIONS with extra_extensions applied (lazy, cached)."""
     _apply_extra_extensions()
@@ -2097,7 +2145,7 @@ def _looks_like_matlab_path(path: str) -> bool:
     return False
 
 
-def get_language_for_path(path: str) -> "Optional[str]":
+def get_language_for_path(path: str, content: str | None = None, repo_root: str | None = None) -> "Optional[str]":
     """Return the language name for a file path, handling compound extensions.
 
     Check order:
@@ -2128,4 +2176,6 @@ def get_language_for_path(path: str) -> "Optional[str]":
             return LANGUAGE_EXTENSIONS[compound]
     # 5. Simple extension
     _, ext = _os.path.splitext(lower)
-    return LANGUAGE_EXTENSIONS.get(ext)
+    if ext:
+        return LANGUAGE_EXTENSIONS.get(ext)
+    return get_extensionless_script_language(path, content=content, repo_root=repo_root)

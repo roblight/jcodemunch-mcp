@@ -18,7 +18,7 @@ import pathspec
 logger = logging.getLogger(__name__)
 
 from .. import config as _config
-from ..parser import cached_parse_file as parse_file, LANGUAGE_EXTENSIONS, get_language_for_path
+from ..parser import cached_parse_file as parse_file, LANGUAGE_EXTENSIONS, get_language_for_path, is_allowed_extensionless_script_path
 from ..parser.context import discover_providers, enrich_symbols, collect_metadata, collect_extra_imports
 from ..parser.context.framework_profiles import detect_framework, profile_to_meta
 from ..parser.imports import extract_imports, _alias_map_cache as _imap_cache, _LANGUAGE_EXTRACTORS as _IMPORT_EXTRACTORS
@@ -225,6 +225,7 @@ class _IndexFilters:
     skip_dirs_regex: Optional[re.Pattern] = None
     check_binary: bool = True
     check_filename: bool = True
+    extensionless_script_folders: tuple[str, ...] = ()
 
 
 def _build_index_filters(
@@ -237,6 +238,7 @@ def _build_index_filters(
     skip_dirs_regex: Optional[re.Pattern] = None,
     check_binary: bool = True,
     check_filename: bool = True,
+    extensionless_script_folders: Optional[list[str]] = None,
 ) -> _IndexFilters:
     """Bundle pre-computed filter config for ``_should_index_file``.
 
@@ -256,6 +258,7 @@ def _build_index_filters(
         skip_dirs_regex=skip_dirs_regex,
         check_binary=check_binary,
         check_filename=check_filename,
+        extensionless_script_folders=tuple(extensionless_script_folders or ()),
     )
 
 
@@ -358,7 +361,18 @@ def _should_index_file(
     # 11. Extension filter
     ext = file_path.suffix
     if ext not in LANGUAGE_EXTENSIONS and get_language_for_path(str(file_path)) is None:
-        return False, "wrong_extension", rel_path, None
+        allowed_extensionless = False
+        if cfg.extensionless_script_folders and ext == "":
+            file_str = resolved_str
+            for root in cfg.extensionless_script_folders:
+                root_str = str(root).rstrip("/")
+                if file_str == root_str or file_str.startswith(root_str + "/"):
+                    allowed_extensionless = True
+                    break
+        if allowed_extensionless:
+            pass
+        else:
+            return False, "wrong_extension", rel_path, None
 
     # 12. Size cap (with package.json forced-path exemption)
     try:
@@ -613,6 +627,7 @@ def resolve_explicit_paths(
     max_files: Optional[int],
     max_size: int = DEFAULT_MAX_FILE_SIZE,
     follow_symlinks: bool = False,
+    allow_extensionless_scripts: bool = False,
 ) -> tuple[list[Path], list[str], dict[str, int]]:
     """Materialise a caller-supplied list of paths into the (files, warnings,
     skip_counts) shape that the standard indexing pipeline expects.
@@ -668,6 +683,7 @@ def resolve_explicit_paths(
                 max_files=remaining,
                 max_size=max_size,
                 follow_symlinks=follow_symlinks,
+                allow_extensionless_scripts=allow_extensionless_scripts,
             )
             warnings.extend(sub_warnings)
             for k, v in sub_skip.items():
@@ -692,9 +708,29 @@ def resolve_explicit_paths(
             continue
 
         if get_language_for_path(str(p)) is None and p.suffix not in LANGUAGE_EXTENSIONS:
-            warnings.append(f"Skipped unsupported extension: {raw!r}")
-            skip_counts["unknown_extension"] = skip_counts.get("unknown_extension", 0) + 1
-            continue
+            allowed_roots = _config.get("extensionless_script_folders", [], repo=str(folder_path)) or []
+            allowed = False
+            if allow_extensionless_scripts and allowed_roots:
+                p_str = p.resolve().as_posix().rstrip("/")
+                for root in allowed_roots:
+                    root_str = str(root).rstrip("/")
+                    if p_str == root_str or p_str.startswith(root_str + "/"):
+                        allowed = True
+                        break
+            logger.debug(
+                "extensionless discovery check",
+                extra={
+                    "path": str(p),
+                    "repo_root": str(folder_path),
+                    "allow_extensionless_scripts": allow_extensionless_scripts,
+                    "allowed_roots": [str(root) for root in allowed_roots],
+                    "allowed": allowed,
+                },
+            )
+            if not allowed:
+                warnings.append(f"Skipped unsupported extension: {raw!r}")
+                skip_counts["unknown_extension"] = skip_counts.get("unknown_extension", 0) + 1
+                continue
 
         try:
             if p.stat().st_size > max_size:
@@ -719,6 +755,7 @@ def discover_local_files(
     max_size: int = DEFAULT_MAX_FILE_SIZE,
     extra_ignore_patterns: Optional[list[str]] = None,
     follow_symlinks: bool = False,
+    allow_extensionless_scripts: bool = False,
 ) -> tuple[list[Path], list[str], dict[str, int]]:
     """Discover source files in a local folder with security filtering.
 
@@ -797,6 +834,7 @@ def discover_local_files(
         skip_dirs_regex=None,
         check_binary=True,
         check_filename=True,
+        extensionless_script_folders=_config.get("extensionless_script_folders", [], repo=str(root)) or [],
     )
 
     skip_dirs_regex = _build_skip_dirs_regex()
@@ -1187,6 +1225,7 @@ def index_folder(
                 skip_dirs_regex=_build_skip_dirs_regex(),
                 check_binary=False,
                 check_filename=True,
+                extensionless_script_folders=_config.get("extensionless_script_folders", [], repo=str(folder_path)) or [],
             )
 
             # Branch detection for watcher fast-path
@@ -1508,6 +1547,7 @@ def index_folder(
                 list(paths),
                 max_files=max_files,
                 follow_symlinks=follow_symlinks,
+                allow_extensionless_scripts=bool(_config.get("extensionless_script_folders", [], repo=str(walk_root))),
             )
         else:
             source_files, discover_warnings, skip_counts = discover_local_files(
@@ -1515,6 +1555,7 @@ def index_folder(
                 max_files=max_files,
                 extra_ignore_patterns=_merged_ignore or None,
                 follow_symlinks=follow_symlinks,
+                allow_extensionless_scripts=bool(_config.get("extensionless_script_folders", [], repo=str(walk_root))),
             )
         warnings.extend(discover_warnings)
         logger.info("Discovery skip counts: %s", skip_counts)
@@ -1692,7 +1733,10 @@ def index_folder(
                 continue
             ext = file_path.suffix
             if ext not in LANGUAGE_EXTENSIONS and get_language_for_path(str(file_path)) is None:
-                continue
+                p_str = file_path.resolve().as_posix().rstrip("/")
+                allowed_roots = _config.get("extensionless_script_folders", [], repo=str(folder_path)) or []
+                if not any(p_str == str(root).rstrip("/") or p_str.startswith(str(root).rstrip("/") + "/") for root in allowed_roots):
+                    continue
             try:
                 file_mtimes[rel_path] = os.stat(file_path).st_mtime_ns
             except OSError as e:

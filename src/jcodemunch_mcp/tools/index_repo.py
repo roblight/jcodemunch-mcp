@@ -13,7 +13,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-from ..parser import get_language_for_path
+from ..parser import get_language_for_path, is_allowed_extensionless_script_path
 from ..security import is_secret_file, is_binary_extension, get_max_index_files, get_extra_ignore_patterns, get_skip_patterns
 from ..storage import IndexStore
 from ._indexing_pipeline import (
@@ -214,7 +214,7 @@ def discover_source_files(
 
         # Extension filter
         _, ext = os.path.splitext(path)
-        if get_language_for_path(path) is None:
+        if get_language_for_path(path) is None and not is_allowed_extensionless_script_path(path):
             continue
 
         # Skip list

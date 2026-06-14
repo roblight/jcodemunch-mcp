@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from .. import config as _config
-from ..parser import LANGUAGE_EXTENSIONS, get_language_for_path
+from ..parser import LANGUAGE_EXTENSIONS, get_language_for_path, is_allowed_extensionless_script_path
 from ..parser.context import discover_providers, collect_metadata
 from ..security import validate_path
 from ..storage import IndexStore
@@ -90,7 +90,7 @@ def index_file(
 
     # Check language support
     ext = file_path.suffix
-    if ext not in LANGUAGE_EXTENSIONS and get_language_for_path(str(file_path)) is None:
+    if ext not in LANGUAGE_EXTENSIONS and get_language_for_path(str(file_path)) is None and not is_allowed_extensionless_script_path(str(file_path), repo_root=str(source_root)):
         return {
             "success": False,
             "error": f"Unsupported file type: {ext}. File not recognized as a supported language.",
