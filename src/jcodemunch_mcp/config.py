@@ -45,6 +45,7 @@ ENV_VAR_MAPPING = {
     "JCODEMUNCH_USE_AI_SUMMARIES": "use_ai_summaries",
     "JCODEMUNCH_TRUSTED_FOLDERS": "trusted_folders",
     "JCODEMUNCH_TRUSTED_FOLDERS_WHITELIST_MODE": "trusted_folders_whitelist_mode",
+    "JCODEMUNCH_EXTENSIONLESS_SCRIPT_FOLDERS": "extensionless_script_folders",
     "JCODEMUNCH_MAX_FILE_SIZE": "max_file_size",
     "JCODEMUNCH_RESPECT_CACHEDIR_TAG": "respect_cachedir_tag",
     "JCODEMUNCH_TOKENIZER_DOWNLOAD": "tokenizer_download",
@@ -359,6 +360,7 @@ DEFAULTS = {
     "use_ai_summaries": "auto",
     "trusted_folders": [],
     "trusted_folders_whitelist_mode": True,
+    "extensionless_script_folders": [],
     "max_file_size": 512000,
     "respect_cachedir_tag": True,
     "skip_msbuild_output": True,
@@ -567,6 +569,7 @@ CONFIG_TYPES = {
     "use_ai_summaries": (bool, str),
     "trusted_folders": list,
     "trusted_folders_whitelist_mode": bool,
+    "extensionless_script_folders": list,
     "max_file_size": int,
     "respect_cachedir_tag": bool,
     "skip_msbuild_output": bool,
@@ -781,6 +784,8 @@ def _validate_type(key: str, value: Any, expected_type: type | tuple) -> bool:
     """Validate value against expected type."""
     if key == "trusted_folders":
         return isinstance(value, list) and all(isinstance(item, str) for item in value)
+    if key == "extensionless_script_folders":
+        return isinstance(value, list) and all(isinstance(item, str) for item in value)
     if key == "use_ai_summaries":
         if isinstance(value, bool):
             return True
@@ -865,6 +870,19 @@ def load_config(storage_path: str | None = None, create_missing: bool = True) ->
                                 else:
                                     raise ValueError(
                                         "Config key 'trusted_folders' contains non-absolute path "
+                                        f"'{folder}'"
+                                    )
+
+                            _GLOBAL_CONFIG[key] = list(valid_folders)
+                        elif key == "extensionless_script_folders" and isinstance(value, list):
+                            valid_folders = set()
+                            for folder in value:
+                                expanded_folder = Path(folder).expanduser()
+                                if expanded_folder.is_absolute():
+                                    valid_folders.add(expanded_folder.resolve())
+                                else:
+                                    raise ValueError(
+                                        "Config key 'extensionless_script_folders' contains non-absolute path "
                                         f"'{folder}'"
                                     )
 
@@ -1811,6 +1829,12 @@ def validate_config(config_path: str) -> list[str]:
                         issues.append(
                             f"trusted_folders entry '{entry}' must be an absolute path"
                         )
+            elif key == "extensionless_script_folders":
+                for entry in value:
+                    if not Path(entry).expanduser().is_absolute():
+                        issues.append(
+                            f"extensionless_script_folders entry '{entry}' must be an absolute path"
+                        )
         else:
             issues.append(f"Config key '{key}' is not recognized (unknown key)")
 
@@ -2472,6 +2496,9 @@ def generate_template() -> str:
   //   Directories allowed for indexing when whitelist_mode is true.
   //   In whitelist mode (default), only these folders can be indexed.
   //   In blacklist mode (whitelist_mode=false), these folders are blocked.
+  // "extensionless_script_folders": [],
+  //   Absolute folders whose extensionless files may be treated as scripts.
+  //   Use this for top-level script directories like bin/.
 
   // "trusted_folders_whitelist_mode": true,
   //   true = only trust folders in trusted_folders list (default, secure).

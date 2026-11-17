@@ -245,6 +245,45 @@ class TestIncrementalIndexFolder:
         cached = IndexStore(base_path=str(store)).get_file_content(owner, repo_name, "main.py")
         assert cached == "def hello():\r\n    return 1\r\n"
 
+    def test_extensionless_bash_script_indexes_symbols(self, tmp_path):
+        """Allowlisted extensionless scripts should resolve language from content."""
+        src = tmp_path / "src"
+        bin_dir = src / "bin"
+        bin_dir.mkdir(parents=True)
+        store = tmp_path / "store"
+
+        (src / ".jcodemunch.jsonc").write_text(
+            '{\n'
+            '  "extensionless_script_folders": [\n'
+            f'    "{bin_dir.as_posix()}"\n'
+            "  ]\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        _write_file(
+            bin_dir,
+            "tool",
+            "#!/bin/bash\n"
+            "source ./lib.sh\n\n"
+            "usage() {\n"
+            "  echo usage\n"
+            "}\n\n"
+            "main() {\n"
+            "  usage\n"
+            "}\n",
+        )
+
+        result = index_folder(str(src), use_ai_summaries=False, storage_path=str(store))
+        assert result["success"] is True
+        assert result["languages"].get("bash") == 1
+        assert "bash" not in result.get("missing_extractors", [])
+
+        owner, repo_name = result["repo"].split("/", 1)
+        idx = IndexStore(base_path=str(store)).load_index(owner, repo_name)
+        assert idx is not None
+        assert idx.file_languages["bin/tool"] == "bash"
+        assert {s["name"] for s in idx.symbols if s["file"] == "bin/tool"} == {"usage", "main"}
+
     def test_local_repo_ids_include_path_hash_and_do_not_collide(self, tmp_path):
         """Two folders with the same basename should get distinct local repo ids."""
         left = tmp_path / "left" / "shared"

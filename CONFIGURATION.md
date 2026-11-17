@@ -655,6 +655,7 @@ The following env vars work as a fallback for their config keys. Config file val
 |----------|-----------|---------|
 | `JCODEMUNCH_USE_AI_SUMMARIES` | `use_ai_summaries` | `true` |
 | `JCODEMUNCH_TRUSTED_FOLDERS` | `trusted_folders` | `[]` |
+| `JCODEMUNCH_EXTENSIONLESS_SCRIPT_FOLDERS` | `extensionless_script_folders` (absolute folders whose extensionless files are indexed by shebang) | `[]` |
 | `JCODEMUNCH_MAX_FOLDER_FILES` | `max_folder_files` | `2000` |
 | `JCODEMUNCH_MAX_INDEX_FILES` | `max_index_files` | `10000` |
 | `JCODEMUNCH_STALENESS_DAYS` | `staleness_days` | `7` |

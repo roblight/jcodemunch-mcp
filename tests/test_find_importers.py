@@ -322,6 +322,27 @@ class TestExtractImportsUnsupported:
         assert result == []
 
 
+class TestExtractImportsBash:
+    """Test shell source import extraction."""
+
+    def test_source_and_dot_imports(self):
+        content = (
+            "#!/bin/bash\n"
+            "source ./lib/common.sh\n"
+            ". ../env.sh\n"
+            "source \"$HOME/.profile\"\n"
+            "echo 'source ignored'\n"
+        )
+
+        result = extract_imports(content, "bin/tool", "bash")
+
+        assert result == [
+            {"specifier": "./lib/common.sh", "names": []},
+            {"specifier": "../env.sh", "names": []},
+            {"specifier": "$HOME/.profile", "names": []},
+        ]
+
+
 # ---------------------------------------------------------------------------
 # Unit tests: resolve_specifier
 # ---------------------------------------------------------------------------

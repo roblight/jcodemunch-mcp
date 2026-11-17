@@ -205,6 +205,12 @@ _GLEAM_IMPORT = re.compile(
     re.MULTILINE,
 )
 
+# Bash/sh: source lib.sh  or  . ./lib.sh
+_BASH_SOURCE = re.compile(
+    r"""^\s*(?:source|\.)\s+['"]?([^'"\s;]+)['"]?""",
+    re.MULTILINE,
+)
+
 
 def _clean_names(raw: str) -> list[str]:
     """Parse comma-separated names from an import clause, stripping aliases/whitespace."""
@@ -1352,6 +1358,10 @@ def _extract_gleam_imports(content: str) -> list[dict]:
     return edges
 
 
+def _extract_bash_imports(content: str) -> list[dict]:
+    return [{"specifier": m.group(1), "names": []} for m in _BASH_SOURCE.finditer(content)]
+
+
 # Dart: import 'package:flutter/material.dart' / import 'dart:async' / import './foo.dart'
 _DART_IMPORT = re.compile(
     r"""^\s*(?:import|export)\s+['"]([^'"]+)['"]""", re.MULTILINE
@@ -2191,6 +2201,7 @@ _LANGUAGE_EXTRACTORS = {
     "haskell": _extract_haskell_imports,
     "gleam": _extract_gleam_imports,
     "racket": _extract_racket_imports,
+    "bash": _extract_bash_imports,
     "dart": _extract_dart_imports,
     "sql": _extract_sql_dbt_imports,
     "asm": _extract_asm_imports,

@@ -18,7 +18,7 @@ import pathspec
 logger = logging.getLogger(__name__)
 
 from .. import config as _config
-from ..parser import cached_parse_file as parse_file, LANGUAGE_EXTENSIONS, get_language_for_path
+from ..parser import cached_parse_file as parse_file, LANGUAGE_EXTENSIONS, get_language_for_path, is_allowed_extensionless_script_path
 from ..parser import grammar_pack
 from ..parser.context import discover_providers, enrich_symbols, collect_metadata, collect_extra_imports
 from ..parser.context._route_utils import iter_source_files
@@ -1224,7 +1224,11 @@ def _should_index_file(
 
     # 11. Extension filter
     ext = file_path.suffix
-    if ext not in LANGUAGE_EXTENSIONS and get_language_for_path(str(file_path)) is None:
+    if (
+        ext not in LANGUAGE_EXTENSIONS
+        and get_language_for_path(str(file_path)) is None
+        and not is_allowed_extensionless_script_path(str(file_path), repo_root=str(cfg.root))
+    ):
         return False, "wrong_extension", rel_path, None
 
     # 12. Size cap (with package.json forced-path exemption)
@@ -2021,7 +2025,11 @@ def resolve_explicit_paths(
             skip_counts["gitignore"] = skip_counts.get("gitignore", 0) + 1
             continue
 
-        if get_language_for_path(str(p)) is None and p.suffix not in LANGUAGE_EXTENSIONS:
+        if (
+            get_language_for_path(str(p)) is None
+            and p.suffix not in LANGUAGE_EXTENSIONS
+            and not is_allowed_extensionless_script_path(str(p), repo_root=str(walk_root))
+        ):
             warnings.append(f"Skipped unsupported extension: {raw!r}")
             skip_counts["unknown_extension"] = skip_counts.get("unknown_extension", 0) + 1
             continue
@@ -3563,7 +3571,11 @@ def index_folder(
                 _drop("outside_root")
                 continue
             ext = file_path.suffix
-            if ext not in LANGUAGE_EXTENSIONS and get_language_for_path(str(file_path)) is None:
+            if (
+                ext not in LANGUAGE_EXTENSIONS
+                and get_language_for_path(str(file_path)) is None
+                and not is_allowed_extensionless_script_path(str(file_path), repo_root=_folder_resolved)
+            ):
                 # Discovery's `_should_index_file` applies CONFIG-driven language
                 # gating; this applies the LANGUAGE_EXTENSIONS registry. When the
                 # two disagree a file passes the walk and dies here, so the
@@ -4076,7 +4088,11 @@ def index_folder(
                 if _filter_row is not None:
                     _filter_rows.append(_filter_row)
 
-            language = get_language_for_path(rel_path)
+            language = get_language_for_path(
+                rel_path,
+                content=content,
+                repo_root=str(folder_path),
+            )
             if not language:
                 no_symbols_files.append(rel_path)
                 # content eligible for GC after this iteration

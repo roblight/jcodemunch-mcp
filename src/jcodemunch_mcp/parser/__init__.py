@@ -1,7 +1,7 @@
 """Parser package for extracting symbols from source code."""
 
 from .symbols import Symbol, make_symbol_id, compute_content_hash
-from .languages import LanguageSpec, LANGUAGE_REGISTRY, LANGUAGE_EXTENSIONS, PYTHON_SPEC, get_language_for_path
+from .languages import LanguageSpec, LANGUAGE_REGISTRY, LANGUAGE_EXTENSIONS, PYTHON_SPEC, get_language_for_path, is_allowed_extensionless_script_path
 from .extractor import parse_file
 from .parse_cache import cached_parse_file
 from .hierarchy import SymbolNode, build_symbol_tree, flatten_tree
@@ -15,6 +15,7 @@ __all__ = [
     "LANGUAGE_EXTENSIONS",
     "PYTHON_SPEC",
     "get_language_for_path",
+    "is_allowed_extensionless_script_path",
     "parse_file",
     "cached_parse_file",
     "SymbolNode",

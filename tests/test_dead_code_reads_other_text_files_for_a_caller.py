@@ -53,7 +53,9 @@ PAIRS = {
         "a.erl", "used_thing", "unused_thing"),
     "bash": (
         {"a.sh": "used_thing() {\n  echo 1\n}\n\nunused_thing() {\n  echo 2\n}\n",
-         "b.sh": "source ./a.sh\nrun() {\n  used_thing\n}\n"},
+         # No `source` line: this fork records `source` as an import edge, and
+         # this fixture needs the two files unjoined.
+         "b.sh": "run() {\n  used_thing\n}\n"},
         "a.sh", "used_thing", "unused_thing"),
     # The ordinary C layout: both files include the header, no edge joins them,
     # and the header DECLARES both functions.
